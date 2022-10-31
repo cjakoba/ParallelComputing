@@ -16,6 +16,12 @@ struct pixel {
 
 typedef struct pixel pixel_t;
 
+
+void Blur(pixel_t * pixel, int height, int width) {
+
+}
+
+
 int main(int argc, char **argv) {
 
 	// Check to see if user specified two command line arguments
@@ -99,7 +105,5 @@ int main(int argc, char **argv) {
 			fprintf(fp, "\n");
 		}
 	}
-
-
 	return 0;
 }
