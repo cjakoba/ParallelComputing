@@ -16,11 +16,15 @@ struct pixel {
 
 typedef struct pixel pixel_t;
 
-int main() {
+int main(int argc, char **argv) {
+
+	// Command line argument for filename to open and blur
+	char *filename = argv[1];
+
 	header_t head;
 
 	FILE *fp;
-	fp = fopen("tower.ppm", "r");
+	fp = fopen(filename, "r");
 	char str[3];
 	int	count = 3;
 	
@@ -32,6 +36,11 @@ int main() {
 	fscanf(fp, "%d %d", &head.width, &head.height);
 	fscanf(fp, "%d", &head.maxRGB);
 
+	if (head.maxRGB != 255)  {
+		printf("File corrupted. MAX RGB value is not 255. Exiting.\n");
+		exit(EXIT_FAILURE);
+	}
+
 	printf("header file : height %d, width %d, maxrgb %d\n", head.height, head.width, head.maxRGB);
 
 	pixel_t * pixels = malloc(head.width * head.height * sizeof(pixel_t));
@@ -42,8 +51,8 @@ int main() {
 
 	fclose(fp);
 
-	// printing header information to a new ppm file
-	fp = fopen("tower_blur.ppm", "w");
+	// printing heade information to a new ppm file
+	fp = fopen("_blur.ppm", "w");
 	fprintf(fp, "P3\n%d %d\n%d\n", head.width, head.height, head.maxRGB);
 
 	// From top to bottom
