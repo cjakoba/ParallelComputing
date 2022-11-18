@@ -50,11 +50,13 @@ int main(int argc, char **argv) {
 			previous_grid[row][column] = grid[row][column];
 		}
 	}
-	
-    // Clear CLI
+
+	fclose(fp);
+
+    // Clear any previous CLI output
     if (rank == 0) {
-        printf("\x1b[H");
-    }
+        system("clear");
+	}
 
     char row_top[COLUMNS];
     char row_bottom[COLUMNS];
@@ -69,8 +71,10 @@ int main(int argc, char **argv) {
         MPI_Status status;
         MPI_Request request;
 
-        // Send data from processes other than master
+        // MASTER PROCESS RECEIVING OTHER PROCESSES ENTIRE SECTIONS AFTER SIMULATION
+        // Send data from processes other than master to master
         if (rank != 0) {
+            // Replace whats in master proc's grid with that of other proc's info
             for (int row = rank * (ROWS/size); row < rank * (ROWS/size) + (ROWS/size); row++) {
                 for (int column = 0; column < COLUMNS; column++) {
                     *q = grid[row][column];
@@ -78,19 +82,16 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        else if (rank == 0) {
-            // Receive from all processes starting at 1
-            for (int i = 1; i < size; i++) {
-                // Its row * column quantity of char elements
-                for (int row = 0; row < ROWS/size * COLUMNS; row++) {
-                    MPI_Recv(c, 1, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                }
-            }
-            // Print out grid after receiving data
-            for (int row = 0; row < ROWS; row++) {
+
+        // Clear CLI before outputting grid
+        if (rank == 0) {
+            printf("\x1b[H");
+        }
+        
+        if (rank == 0) {
+            for (int row = 0; row < rank * (ROWS/size) + (ROWS/size); row++) {
                 for (int column = 0; column < COLUMNS; column++) {
                     char tile = grid[row][column];
-                        
                     if (tile == 'T') {
                         printf(ANSI_COLOR_GREEN "%c" ANSI_COLOR_RESET, tile);	
                     } 
@@ -98,10 +99,29 @@ int main(int argc, char **argv) {
                         printf(ANSI_COLOR_YELLOW "%c" ANSI_COLOR_RESET, tile);	
                     }
                     else {
-                        printf("%c", tile);	
+                        printf(ANSI_COLOR_BLACK "%c" ANSI_COLOR_RESET, tile);	
                     }
                 }
                 printf("\n");
+            }
+
+            // Receive from all processes starting at 1
+            for (int i = 1; i < size; i++) {
+                // Its section of the grid
+                for (int row = 0; row < ROWS/size; row++) {
+                    for (int column = 0; column < COLUMNS; column++) {
+                        MPI_Recv(c, 1, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        if (*c == 'T') {
+                            printf(ANSI_COLOR_GREEN "%c" ANSI_COLOR_RESET, *c);	
+                        } 
+                        else if (*c == 'X') {
+                            printf(ANSI_COLOR_YELLOW "%c" ANSI_COLOR_RESET, *c);	
+                        } else {
+                            printf(ANSI_COLOR_BLACK "%c" ANSI_COLOR_RESET, *c);	
+                        }
+                    }
+                    printf("\n");
+                }
             }
         }
  
@@ -119,8 +139,7 @@ int main(int argc, char **argv) {
         // Send top row data to proc above when not the only, or first process
         if (rank != 0) {
             // Store current proc's current top row information
-            for (int column = 0; column < COLUMNS; column++) {
-                row_top[column] = grid[rank * (ROWS/size)][column];
+            for (int column = 0; column < COLUMNS; column++) { row_top[column] = grid[rank * (ROWS/size)][column];
             } 
             MPI_Isend(row_top, COLUMNS, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD, &request);
         }
@@ -157,7 +176,9 @@ int main(int argc, char **argv) {
 				}
 			}
 		}
-       // Each process takes over separate rows according to its rank
+
+        // MAIN LOGIC AND EDGE DECTION
+        // Each process takes over separate rows according to its rank
 		for (int row = 0; row < ROWS; row++) {
 			double prob;
 			double tree_prob;
@@ -261,9 +282,14 @@ int main(int argc, char **argv) {
 			}
 		}
 
+        int animated = 1; // Allows user to choose between animated (1) output and static (0) output
         if (rank == 0) {
-            sleep(1);
-            printf("\x1b[H");
+            // Show output for a second before clearing for animated look
+            if (animated == 1) {
+                sleep(1);
+            } else {
+                printf("------------------------------------------------------------------------------------------\n");
+            }
         }
 
 		// Copy the current grid into the previous grid
@@ -273,10 +299,8 @@ int main(int argc, char **argv) {
             }
         }
 
-    // end of generational loop
-	}
+	} // End of generational loop
 
-	fclose(fp);
     MPI_Finalize();
 	return 0;
 }
