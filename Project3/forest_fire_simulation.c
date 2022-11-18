@@ -53,8 +53,15 @@ int main(int argc, char **argv) {
 
 	fclose(fp);
 
-    // Clear any previous CLI output
+
+    int animated; // Simulation is animated by default
     if (rank == 0) {
+        // Ask user for animated or static output of simulation
+        printf("Animated simulation (1), or Static simulation (0): ");
+        fflush(stdout);
+        scanf("%d", &animated);
+
+        // Clear any previous CLI output
         system("clear");
 	}
 
@@ -67,64 +74,9 @@ int main(int argc, char **argv) {
     char *c = malloc(sizeof(char));
 
 	// Prints back rows and columns
-	for (int current_gen = 0; current_gen < generations; current_gen++) {
+	for (int current_gen = 0; current_gen <= generations; current_gen++) {
         MPI_Status status;
         MPI_Request request;
-
-        // MASTER PROCESS RECEIVING OTHER PROCESSES ENTIRE SECTIONS AFTER SIMULATION
-        // Send data from processes other than master to master
-        if (rank != 0) {
-            // Replace whats in master proc's grid with that of other proc's info
-            for (int row = rank * (ROWS/size); row < rank * (ROWS/size) + (ROWS/size); row++) {
-                for (int column = 0; column < COLUMNS; column++) {
-                    *q = grid[row][column];
-                    MPI_Send(q, 1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
-                }
-            }
-        }
-
-        // Clear CLI before outputting grid
-        if (rank == 0) {
-            printf("\x1b[H");
-        }
-        
-        if (rank == 0) {
-            for (int row = 0; row < rank * (ROWS/size) + (ROWS/size); row++) {
-                for (int column = 0; column < COLUMNS; column++) {
-                    char tile = grid[row][column];
-                    if (tile == 'T') {
-                        printf(ANSI_COLOR_GREEN "%c" ANSI_COLOR_RESET, tile);	
-                    } 
-                    else if (tile == 'X') {
-                        printf(ANSI_COLOR_YELLOW "%c" ANSI_COLOR_RESET, tile);	
-                    }
-                    else {
-                        printf(ANSI_COLOR_BLACK "%c" ANSI_COLOR_RESET, tile);	
-                    }
-                }
-                printf("\n");
-            }
-
-            // Receive from all processes starting at 1
-            for (int i = 1; i < size; i++) {
-                // Its section of the grid
-                for (int row = 0; row < ROWS/size; row++) {
-                    for (int column = 0; column < COLUMNS; column++) {
-                        MPI_Recv(c, 1, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        if (*c == 'T') {
-                            printf(ANSI_COLOR_GREEN "%c" ANSI_COLOR_RESET, *c);	
-                        } 
-                        else if (*c == 'X') {
-                            printf(ANSI_COLOR_YELLOW "%c" ANSI_COLOR_RESET, *c);	
-                        } else {
-                            printf(ANSI_COLOR_BLACK "%c" ANSI_COLOR_RESET, *c);	
-                        }
-                    }
-                    printf("\n");
-                }
-            }
-        }
- 
         
         // SEND INITAL GRID STATES TO OTHER PROCS
         // Send bottom row data to proc below when not the last process
@@ -165,7 +117,61 @@ int main(int argc, char **argv) {
                 grid[rank * (ROWS/size)][column] = proc_row_top[column];
             }
         }
+        // MASTER PROCESS RECEIVING OTHER PROCESSES ENTIRE SECTIONS AFTER SIMULATION
+        // Send data from processes other than master to master
+        if (rank != 0) {
+            // Replace whats in master proc's grid with that of other proc's info
+            for (int row = rank * (ROWS/size); row < rank * (ROWS/size) + (ROWS/size); row++) {
+                for (int column = 0; column < COLUMNS; column++) {
+                    *q = grid[row][column];
+                    MPI_Send(q, 1, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+                }
+            }
+        }
 
+        // Clear CLI before outputting grid
+        if (rank == 0) {
+            printf("\x1b[H");
+        }
+        if (rank == 0) {
+            printf("-------------------------------------------------------------------------------------\n");
+            printf("   %s : Generation %d / %d\n", input_file, current_gen, generations);
+            printf("-------------------------------------------------------------------------------------\n");
+            for (int row = 0; row < rank * (ROWS/size) + (ROWS/size); row++) {
+                for (int column = 0; column < COLUMNS; column++) {
+                    char tile = grid[row][column];
+                    if (tile == 'T') {
+                        printf(ANSI_COLOR_GREEN "%c" ANSI_COLOR_RESET, tile);	
+                    } 
+                    else if (tile == 'X') {
+                        printf(ANSI_COLOR_YELLOW "%c" ANSI_COLOR_RESET, tile);	
+                    }
+                    else {
+                        printf(ANSI_COLOR_BLACK "%c" ANSI_COLOR_RESET, tile);	
+                    }
+                }
+                printf("\n");
+            }
+
+            // Receive from all processes starting at 1
+            for (int i = 1; i < size; i++) {
+                // Its section of the grid
+                for (int row = 0; row < ROWS/size; row++) {
+                    for (int column = 0; column < COLUMNS; column++) {
+                        MPI_Recv(c, 1, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        if (*c == 'T') {
+                            printf(ANSI_COLOR_GREEN "%c" ANSI_COLOR_RESET, *c);	
+                        } 
+                        else if (*c == 'X') {
+                            printf(ANSI_COLOR_YELLOW "%c" ANSI_COLOR_RESET, *c);	
+                        } else {
+                            printf(ANSI_COLOR_BLACK "%c" ANSI_COLOR_RESET, *c);	
+                        }
+                    }
+                    printf("\n");
+                }
+            }
+        }
 		// clear fire (X) for new generations
 		for (int row = 0; row < ROWS; row++) {
             for (int column = 0; column < COLUMNS; column++) {
@@ -282,13 +288,12 @@ int main(int argc, char **argv) {
 			}
 		}
 
-        int animated = 1; // Allows user to choose between animated (1) output and static (0) output
         if (rank == 0) {
             // Show output for a second before clearing for animated look
             if (animated == 1) {
                 sleep(1);
             } else {
-                printf("------------------------------------------------------------------------------------------\n");
+                printf("-------------------------------------------------------------------------------------\n");
             }
         }
 
@@ -301,6 +306,22 @@ int main(int argc, char **argv) {
 
 	} // End of generational loop
 
+    if (rank == 0) {
+        if ((fp = fopen("FOREST_FIRE_RESULTS.txt", "w+")) == NULL) {
+            fprintf(stderr, "ERROR in writing to results file...");
+            exit(EXIT_FAILURE);
+        }
+        for (int row = 0; row < ROWS; row++) {
+            for (int column = 0; column < COLUMNS-1; column++) {
+                fprintf(fp, "%c", grid[row][column]);
+            }
+            fprintf(fp, "\n");
+        } 
+        printf("-------------------------------------------------------------------------------------\n");
+        printf("Simulation results stored in: ./FOREST_FIRE_RESULTS.txt\n");
+        printf("-------------------------------------------------------------------------------------\n");
+    }
+    
     MPI_Finalize();
 	return 0;
 }
