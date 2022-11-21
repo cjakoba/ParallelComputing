@@ -4,9 +4,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#define POP_SIZE 10
+#define POP_SIZE 100
 #define END_GEN 1000000
 #define MUTATION_PROB 0.1
+#define NO_IMPROVEMENT 10000
 
 int size;
 int max_weight;
@@ -344,8 +345,13 @@ int main(int argc, char** argv) {
 	}
 	
 	int best = INT_MAX;
+
+	// Convergence variables
+	int no_improvement = 0;
+	int previous_fitness = INT_MAX;
+
 	// Generational loop
-	for (int gen = 0; gen < END_GEN; gen++) {
+	for (int gen = 0; gen < END_GEN && no_improvement <= NO_IMPROVEMENT; gen++) {
 		
 		// Selection - Choice which chromosomes move on to the next generation
 		// Can currently select the same chromosome twice
@@ -378,9 +384,7 @@ int main(int argc, char** argv) {
 				mutate(offspring[1], size);
 			}
 
-			//for (int i = 0; i < 2; i++) {
-			//	printArray(offspring[i], size);
-			//}
+			//for (int i = 0; i < 2; i++) { printArray(offspring[i], size); }
 
 			copyInto2DArray(total_population[POP_SIZE * 2 - i], offspring[0], size);
 			copyInto2DArray(total_population[POP_SIZE * 2 - (i + 1)], offspring[1], size);
@@ -416,6 +420,14 @@ int main(int argc, char** argv) {
 		if (fitness(population[0], size, max_weight) <= best) {
 			best = fitness(population[0], size, max_weight);
 		}
+		
+		// Convergence detection
+		if (best == previous_fitness) {
+			no_improvement++;
+		} else {
+			no_improvement = 0;
+		}
+		previous_fitness = best;
 	}
 	
 	printf("Most fit found: %d\n", fitness(population[0], size, max_weight));
