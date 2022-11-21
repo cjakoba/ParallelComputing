@@ -5,7 +5,8 @@
 #include <unistd.h>
 
 #define POP_SIZE 10
-#define END_GEN 10000
+#define END_GEN 1000000
+#define MUTATION_PROB 0.1
 
 int size;
 int max_weight;
@@ -185,8 +186,8 @@ int *most_fit(int **population, int size, int max_weight, int max_search) {
 	}	
 	best_indexes[0] = first_index;
 	best_indexes[1] = second_index;
-	printf("Best fitness=%d, at index %d.\n", first_best, first_index);
-	printf("Second fitness=%d, at index %d.\n", second_best, second_index);
+	//printf("Best fitness=%d, at index %d.\n", first_best, first_index);
+	//printf("Second fitness=%d, at index %d.\n", second_best, second_index);
 	return best_indexes;
 }
 
@@ -200,7 +201,7 @@ int least_fit(int **population, int size, int max_weight) {
 			worst_index = chromosome;
 		}
 	}
-	printf("The worst fitness is %d, at index %d.\n", worst_fitness, worst_index);
+	//printf("The worst fitness is %d, at index %d.\n", worst_fitness, worst_index);
 	return worst_index;
 }
 
@@ -272,7 +273,29 @@ int *tournament_selection(int **population, int size, int max_weight) {
 	}
 }
 
+int *get_unique_genes(int size) {
+	int *genes = malloc(2 * sizeof(int));
+	genes[0] = random_num(size, 0);
 
+	do {
+		genes[1] = random_num(size, 0);
+	} while (genes[0] == genes[1]);
+
+	return genes;
+}
+
+// Mutates a chromosome in-place, swapping two random indexes
+void swap_mutate(int *chromosome, int size) {
+	int *genes = get_unique_genes(size);
+	//printf("Swapping %d with %d index\n", genes[0], genes[1]);
+	int temp = chromosome[genes[0]];
+		chromosome[genes[0]] = chromosome[genes[1]];
+		chromosome[genes[1]] = temp;
+}
+
+void mutate(int *chromosome, int size) {
+	swap_mutate(chromosome, size);
+}
 
 int main(int argc, char** argv) {
 	unsigned long seed = mix(clock(), time(NULL), getpid());
@@ -330,18 +353,30 @@ int main(int argc, char** argv) {
 			copyInto2DArray(total_population[i], population[i], size);
 		}
 		for (int i = 1; i <= POP_SIZE; i+=2) {
-			printf("WINNER1:\n");
+			//printf("WINNER1:\n");
 			int *winner = tournament_selection(population, size, max_weight);
-			printArray(winner, size);
+			//printArray(winner, size);
 
 			
-			printf("WINNER2:\n");
+			//printf("WINNER2:\n");
 			int *winner2= tournament_selection(population, size, max_weight);
-			printArray(winner2, size);
+			//printArray(winner2, size);
 
 			// Crossover - kind of buggy
-			printf("OFFSPRING:\n");
+			//printf("OFFSPRING:\n");
 			int **offspring = crossover(winner, winner2, size);
+
+			// Mutation of offspring - swap is working
+			double mutate_A = rand() / (double) RAND_MAX;
+			double mutate_B = rand() / (double) RAND_MAX;
+
+			if (mutate_A <= MUTATION_PROB) {
+				mutate(offspring[0], size);
+			}
+			
+			if (mutate_B <= MUTATION_PROB) {
+				mutate(offspring[1], size);
+			}
 
 			//for (int i = 0; i < 2; i++) {
 			//	printArray(offspring[i], size);
@@ -352,28 +387,25 @@ int main(int argc, char** argv) {
 		}
 		
 
-		// After crossover, add to population
+		// After crossover and mutation, add to population
 		
-		for (int i = 0; i < 2 * POP_SIZE; i++) {
-			printArray(total_population[i], size);
-		}
-		printf("\n");
-		printf("Before sorting... ---------------------\n");
-		for (int i = 0; i < 2 * POP_SIZE; i++) {
-			printf("%d, ", fitness(total_population[i], size, max_weight));
-		}
-		printf("\n");
+		//for (int i = 0; i < 2 * POP_SIZE; i++) {
+			//printArray(total_population[i], size);
+		//}
+		//printf("\n");
+		//printf("Before sorting... ---------------------\n");
+		//for (int i = 0; i < 2 * POP_SIZE; i++) {
+			//printf("%d, ", fitness(total_population[i], size, max_weight));
+		//}
+		//printf("\n");
 		
-		int arr[] = {
-			1, 6, 5, 2, 3, 9, 4, 7, 8
-		};
 		// Sort by most fit and use those
 		qsort(total_population, 2 * POP_SIZE, sizeof(total_population[0]), compare_fitness);
-		printf("After sorting... ---------------------\n");
-		for (int i = 0; i < 2 * POP_SIZE; i++) {
-			printf("%d, ", fitness(total_population[i], size, max_weight));
-		}
-		printf("\n");
+		//printf("After sorting... ---------------------\n");
+		//for (int i = 0; i < 2 * POP_SIZE; i++) {
+			//printf("%d, ", fitness(total_population[i], size, max_weight));
+		//}
+		//printf("\n");
 
 		// After sort, keep the top POP_SIZE chromosomes
 		for (int i = 0; i < POP_SIZE; i++) {
