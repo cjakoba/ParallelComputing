@@ -2,9 +2,41 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <time.h>
+#include <unistd.h>
 
-#define POP_SIZE 200
-#define END_GEN 1000
+#define POP_SIZE 10
+#define END_GEN 10000
+
+int size;
+int max_weight;
+
+// Returns a random integer from min to max-1 with uniform distribution
+int random_num(int max, int min) {
+	return ((double) rand() / (RAND_MAX + 1.0)) * (max - min) + min; // min <= return <= max
+}
+
+// Copies over a 1D array into a 2D array
+void copyInto2DArray(int *chromosome, int *gene, int size) {
+	for (int i = 0; i < size; i++) {
+		chromosome[i] = gene[i];
+	}
+}
+
+// Prints out an array of integers
+void printArray(int *array, int size) {
+	for (int i = 0; i < size; i++) {
+		printf("%d, ", array[i]);
+	}
+	printf("\n");
+}
+
+// Prints out a 2D array of integers
+void print2DArray(int **array, int size) {
+	for (int i = 0; i < POP_SIZE; i++) {
+		printArray(array[i], size);
+	}
+	printf("\n");
+}
 
 // Applies greedy algorithm for determining number of bins for
 // current array elelement arrangement sequentially
@@ -25,47 +57,107 @@ int greedy_bins(int *array, int size, int max_weight) {
 	return bins;
 }
 
-// Prints out an array of integers
-void printArray(int *array, int size, int max_weight) {
-	for (int i = 0; i < size; i++) {
-		printf("%d, ", array[i]);
-	}
-	printf(" bins=%d\n", greedy_bins(array, size, max_weight));
-}
-
-// Prints out a 2D array of integers
-void print2DArray(int **array, int size, int max_weight) {
-	for (int i = 0; i < POP_SIZE; i++) {
-		printArray(array[i], size, max_weight);
-	}
-	printf("\n");
-}
-
 // Employs the modern Fisher-Yates shuffle algorithm to shuffle an 
 // array of integers with all permutations equally likely.
+// Rand is not recommended.
 void shuffle(int *array, int size) {
-	srand(time(NULL));
 	int j;
 	int temp;
-	for (int i = size-1; i >= 0; i--) {
-		j = rand() % (i + 1); //0 <= j <= i
+	// From 0 <= i <= size-1 select random index
+	for (int i = size-1; i > 0; i--) {
+		j = random_num(i + 1, 0);
 	  	temp = array[i];
 		array[i] = array[j];
 		array[j] = temp;
 	}
 }
 
-int *crossover(int *chromosomeA, int *chromosomeB, int size) {
-	srand(time(NULL));
-	int *offspring = malloc(size * sizeof(int));
-	int index = rand() % (size + 1);
+int **crossover(int *chromosomeA, int *chromosomeB, int size) {
+	// Allocating 2D offspring array
+	int **offspring = malloc(2 * sizeof(int *));
+	for (int i = 0; i < 2; i++) {
+		offspring[i] = malloc(size * sizeof(int));
+	}
+	
+
+	// Generate random crossover point
+	int index = random_num(size, 1);
+	
+	int seen_numbers_B[200];
+	int seen_numbers_A[200];
+
+	int head_numbers_A[200];
+	int head_numbers_B[200];
+
+
+	// Set heads of arrays
 	for (int i = 0; i < index; i++) {
-		offspring[i] = chromosomeA[i];
+		offspring[0][i] = chromosomeA[i]; // Head from A - takes tail from B
+		offspring[1][i] = chromosomeB[i]; // Head from B - takes tail from A
 	}
-	for (int i = index; i < size; i++) {
-		offspring[i] = chromosomeB[i];
+
+	// Create associative arrays for numbers
+	for (int i = 0; i < 200; i++) {
+		seen_numbers_A[i] = 0;
+		head_numbers_A[i] = 0;
+
+		seen_numbers_B[i] = 0;
+		head_numbers_B[i] = 0;
 	}
-	printf("Crossover index start=%d (noninclusive)\n", index);
+
+	// Count all the number apperances in ChromosomeB's entire array
+	for (int i = 0; i < size; i++) {
+		seen_numbers_A[chromosomeA[i]]++; // Takes tail from B
+		//printf("chromosomeA[i] = %d, seen_numbers_A[chromosomeA[i]] = %d\n", chromosomeA[i], seen_numbers_A[chromosomeA[i]]);
+		seen_numbers_B[chromosomeB[i]]++; // Takes tail from A
+		//printf("chromosomeB[i] = %d, seen_numbers_B[chromosomeB[i]] = %d\n", chromosomeB[i], seen_numbers_B[chromosomeB[i]]);
+	}
+
+	// Count all the number of appearances in Chromosome's head of array
+	for (int i = 0; i < index; i++) {
+		head_numbers_A[chromosomeA[i]]++;
+		head_numbers_B[chromosomeB[i]]++;
+	}
+
+	// Decrement count of numbers from ChromosomeA's head of array from entirety of B's array
+	for (int i = 0; i < size; i++) {
+		// subtract head numbers from seen to get available numbers for tail
+		//printf("chromosomeB[i] = %d seen_numbers_A[chromosomeB[i]] = %d - head_numbers_B[chromosomeB[i]] %d = %d\n", chromosomeB[i], seen_numbers_A[chromosomeB[i]], head_numbers_B[chromosomeB[i]], seen_numbers_A[chromosomeB[i]] - head_numbers_B[chromosomeB[i]]);
+		if (head_numbers_B[chromosomeB[i]] > 0) {
+			seen_numbers_A[chromosomeB[i]]--; // takes tail from B
+			head_numbers_B[chromosomeB[i]]--;
+		}
+		if (head_numbers_A[chromosomeA[i]] > 0) {
+			seen_numbers_B[chromosomeA[i]]--; // takes tail from B
+			head_numbers_A[chromosomeA[i]]--;
+		}
+	}
+
+	// Append to tail of new offspring the remaining available numbers
+	int j = index;
+	int k = index;
+
+	// Increment through the entire chromosome
+	for (int i = 0; i < size; i++) {
+
+		// Checks if that number is still available for addition into offspring tail
+		// Takes tail from B, Head from A
+		if (seen_numbers_B[chromosomeB[i]] > 0) {
+			offspring[0][j++] = chromosomeB[i];
+			seen_numbers_B[chromosomeB[i]]--;
+		}
+	}
+
+	for (int i = 0; i < size; i++) {
+
+		// Takes tail from A, Head from B
+		if (seen_numbers_A[chromosomeA[i]] > 0) {
+			offspring[1][k++] = chromosomeA[i];
+			seen_numbers_A[chromosomeA[i]]--;
+		}
+	}
+
+	//printf("Crossover index ends=%d (noninclusive)\n", index);
 	return offspring;
 }
 
@@ -112,11 +204,85 @@ int least_fit(int **population, int size, int max_weight) {
 	return worst_index;
 }
 
+// Returns the fitness of a chromosome
+int fitness(int *population, int size, int max_weight) {
+	return greedy_bins(population, size, max_weight);
+}
+
+// Compares total population for fitness for sorting by qsort
+int compare_fitness(const void *p, const void *q) {
+	int **l = (int **) p;
+	int **r = (int **) q; 
+	int left = fitness(*l, size, max_weight);
+	int right = fitness(*r, size, max_weight);
+
+	if (left > right) {
+		return 1;
+	}
+	if (left < right) {
+		return -1;
+	}
+	return 0;
+}
+
+// Robert Jenkins' 96 bit Mix Function
+unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {
+ 	a=a-b;  a=a-c;  a=a^(c >> 13);
+    b=b-c;  b=b-a;  b=b^(a << 8);
+    c=c-a;  c=c-b;  c=c^(b >> 13);
+    a=a-b;  a=a-c;  a=a^(c >> 12);
+    b=b-c;  b=b-a;  b=b^(a << 16);
+    c=c-a;  c=c-b;  c=c^(b >> 5);
+    a=a-b;  a=a-c;  a=a^(c >> 3);
+    b=b-c;  b=b-a;  b=b^(a << 10);
+    c=c-a;  c=c-b;  c=c^(b >> 15);
+    return c;
+}
+
+// Want to make sure you don't choose the same individual twice
+int *tournament_selection(int **population, int size, int max_weight) {
+	int index_a, index_b;
+	
+	// Chose two random members from population of size POP_SIZE
+	index_a = random_num(POP_SIZE, 0);
+	do {
+		index_b = random_num(POP_SIZE, 0);
+	} while (index_b == index_a);
+
+	int fitness_a = fitness(population[index_a], size, max_weight);
+	int fitness_b = fitness(population[index_b], size, max_weight);
+
+	
+
+	// Diagnostic information for random indexes
+	//printf("index_a = %d\n", index_a);
+	//printf("fitness_a = %d\n", fitness_a);
+	//printArray(population[index_a], size);
+	//printf("------\n");
+	//printf("index_b = %d\n", index_b);
+	//printf("fitness_b = %d\n", fitness_b);
+	//printArray(population[index_b], size);
+	//printf("------\n");
+
+	if (fitness_a <= fitness_b) {
+		return population[index_a];
+	}
+	else {
+		return population[index_b];
+	}
+}
+
+
+
 int main(int argc, char** argv) {
+	unsigned long seed = mix(clock(), time(NULL), getpid());
+	// Seed only once at the top of the program
+	// If you reseed too quickly during the same second, you will end up getting the same numbers
+	srand(seed);
 	char *file_name = argv[1];
 
-	int max_weight = -1; // Max bin weight
-	int size = -1; // Number of items to organize
+	max_weight = -1; // Max bin weight
+	size = -1; // Number of items to organize
 	
 
 	// File handling
@@ -129,7 +295,6 @@ int main(int argc, char** argv) {
 	fscanf(fp, "%d", &max_weight); // Get the max bin weight from file
 	fscanf(fp, "%d", &size); // Get the number of items to organize from file
 	
-	printf("Total items=%d\n", size);
 	int items[size]; // All item weights to be organized
 	
 	// Gets all items from the file and stores into array
@@ -143,52 +308,85 @@ int main(int argc, char** argv) {
 		population[i] = malloc(size * sizeof(int));
 	}
 
-	// Copying over shuffled chromosomes into population
+	int **total_population = malloc((2 * POP_SIZE) * sizeof(int *));
+	for (int i = 0; i < (2 * POP_SIZE); i++) {
+		total_population[i] = malloc(size * sizeof(int));
+	}
+		
+	// Generate first random population
 	for (int i = 0; i < POP_SIZE; i++) {
-		for (int j = 0; j < size; j++) {
-			population[i][j] = items[j];
-		}
+		// Copies in the original file order then shuffles items and adds to population
+		copyInto2DArray(population[i], items, size);
 		shuffle(items, size);
 	}
-
-	// Finding top 2 best fit indexes
 	
-	int best_packer = INT_MAX;
-	int end_generation = 100;
-	for (int generation = 0; generation < END_GEN; generation++) {
+	int best = INT_MAX;
+	// Generational loop
+	for (int gen = 0; gen < END_GEN; gen++) {
+		
+		// Selection - Choice which chromosomes move on to the next generation
+		// Can currently select the same chromosome twice
 		for (int i = 0; i < POP_SIZE; i++) {
-			int fitness = greedy_bins(population[i], size, max_weight);
-			if (fitness < best_packer) {
-				best_packer = fitness;
-			}
-			int *best_indexes = most_fit(population, size, max_weight, 2);
-			int worst_index = least_fit(population, size, max_weight);
+			copyInto2DArray(total_population[i], population[i], size);
+		}
+		for (int i = 1; i <= POP_SIZE; i+=2) {
+			printf("WINNER1:\n");
+			int *winner = tournament_selection(population, size, max_weight);
+			printArray(winner, size);
 
-			print2DArray(population, size, max_weight);
-			printf("offspring generated: ");
-			population[worst_index] = crossover(population[best_indexes[0]], population[best_indexes[1]], size); 
+			
+			printf("WINNER2:\n");
+			int *winner2= tournament_selection(population, size, max_weight);
+			printArray(winner2, size);
 
+			// Crossover - kind of buggy
+			printf("OFFSPRING:\n");
+			int **offspring = crossover(winner, winner2, size);
+
+			//for (int i = 0; i < 2; i++) {
+			//	printArray(offspring[i], size);
+			//}
+
+			copyInto2DArray(total_population[POP_SIZE * 2 - i], offspring[0], size);
+			copyInto2DArray(total_population[POP_SIZE * 2 - (i + 1)], offspring[1], size);
+		}
+		
+
+		// After crossover, add to population
+		
+		for (int i = 0; i < 2 * POP_SIZE; i++) {
+			printArray(total_population[i], size);
+		}
+		printf("\n");
+		printf("Before sorting... ---------------------\n");
+		for (int i = 0; i < 2 * POP_SIZE; i++) {
+			printf("%d, ", fitness(total_population[i], size, max_weight));
+		}
+		printf("\n");
+		
+		int arr[] = {
+			1, 6, 5, 2, 3, 9, 4, 7, 8
+		};
+		// Sort by most fit and use those
+		qsort(total_population, 2 * POP_SIZE, sizeof(total_population[0]), compare_fitness);
+		printf("After sorting... ---------------------\n");
+		for (int i = 0; i < 2 * POP_SIZE; i++) {
+			printf("%d, ", fitness(total_population[i], size, max_weight));
+		}
+		printf("\n");
+
+		// After sort, keep the top POP_SIZE chromosomes
+		for (int i = 0; i < POP_SIZE; i++) {
+			copyInto2DArray(population[i], total_population[i], size);
+		}
+
+		//print2DArray(population, size);
+		if (fitness(population[0], size, max_weight) <= best) {
+			best = fitness(population[0], size, max_weight);
 		}
 	}
-	printf("Best Packer was: %d\n", best_packer);
-
-
-	// TODO: 
-	// Generate new offspring from crossover replacing least fit chromosomes
-	// add new offspring to population
 	
-	// Genetic algo
-	// get fitness of each member of population
-	// eliminate least fit members
-	// new members created by modifying members of population
-	// 		created by randomly mutating sequences with lowest bin count
-	// up to you to determine how many seq in population
-	// What percentage die each iteration
-	// what percentage of the best solutions are new members based on
-	// How exactly are new members mutated
-	// Are entirely new random sequences introduced? and how often?
-	// When does this process stop?
-
+	printf("Most fit found: %d\n", fitness(population[0], size, max_weight));
 
 	return 0;
 }
