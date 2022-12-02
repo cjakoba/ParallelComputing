@@ -4,21 +4,17 @@
 #include <time.h>
 #include <unistd.h>
 
-#define POP_SIZE 100 // number of chromosomes in a population
+#define POP_SIZE 250 // number of chromosomes in a population
 #define END_GEN 1000000
-#define MUTATION_PROB 0.05
+#define MUTATION_PROB 0.25
 #define NO_IMPROVEMENT 10000
+#define TOURNAMENT_SIZE 5
 
 int size; // number of genes in a chromosome
 int max_weight;
 
-// Returns a random integer from min to max-1 with uniform distribution
-// Any number between 0 and max (inclusive) is likely to occur.
+// Returns a random integer from 0 to max (inclusive) with uniform distribution
 int random_num(int max) {
-	//old implementation
-	//int random = ((double) rand() / (RAND_MAX + 1.0)) * (max - min) + min; // min <= return <= max
-	//return random;
-	
 	unsigned long num_bins = (unsigned long) max + 1;
 	unsigned long num_rand = (unsigned long) RAND_MAX + 1;
 	unsigned long bin_size = num_rand / num_bins;
@@ -237,63 +233,51 @@ int compare_fitness(const void *p, const void *q) {
 	return 0;
 }
 
-// Robert Jenkins' 96 bit Mix Function
-unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {
- 	a=a-b;  a=a-c;  a=a^(c >> 13);
-    b=b-c;  b=b-a;  b=b^(a << 8);
-    c=c-a;  c=c-b;  c=c^(b >> 13);
-    a=a-b;  a=a-c;  a=a^(c >> 12);
-    b=b-c;  b=b-a;  b=b^(a << 16);
-    c=c-a;  c=c-b;  c=c^(b >> 5);
-    a=a-b;  a=a-c;  a=a^(c >> 3);
-    b=b-c;  b=b-a;  b=b^(a << 10);
-    c=c-a;  c=c-b;  c=c^(b >> 15);
-    return c;
+// Determines if a value already exists in an array
+int value_in_array(int value, int *array, int size) {
+	for (int i = 0; i < size; i++) {
+		if (array[i] == value) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 // Want to make sure you don't choose the same individual twice
-int *tournament_selection(int **population, int size, int max_weight) {
-	int index_a, index_b;
-	
-	// Chose two random members from population of size POP_SIZE
-	index_a = random_num(POP_SIZE-1);
-	do {
-		index_b = random_num(POP_SIZE-1);
-	} while (index_b == index_a);
+int tournament_selection(int **population, int size, int participants, int max_weight) {
+	int indexes[participants]; // Random population indexes for tournament selection
 
-	int fitness_a = fitness(population[index_a], size, max_weight);
-	int fitness_b = fitness(population[index_b], size, max_weight);
-
-	// Diagnostic information
-	//printf("Population: \n");
-	//print2DArray(population, size);
-	//printf("\n");
-
-	//printf("Comparing index %d |", index_a);
-	//printArray(population[index_a], size);
-	//printf("with index %d |", index_b);
-	//printArray(population[index_b], size);
-	//printf("\n");
-
-	
-
-	// Diagnostic information for random indexes
-	//printf("index_a = %d\n", index_a);
-	//printf("fitness_a = %d\n", fitness_a);
-	//printArray(population[index_a], size);
-	//printf("------\n");
-	//printf("index_b = %d\n", index_b);
-	//printf("fitness_b = %d\n", fitness_b);
-	//printArray(population[index_b], size);
-	//printf("------\n");
-
-	if (fitness_a <= fitness_b) {
-		return population[index_a];
+	// Initialize indexes with random values not checking for duplicates
+	for (int i = 0; i < participants; i++) {
+		indexes[i] = random_num(POP_SIZE-1);
 	}
-	else {
-		return population[index_b];
+	
+	// Runs through random values, regenerating duplicate indexes values with new values not in array
+	for (int i = 0; i < participants; i++) {
+		int index = indexes[i];
+
+		// If the value already exists in the indexes array, generate a new random index
+		while (value_in_array(index, indexes, participants) == 1) {
+			index = random_num(POP_SIZE-1);
+		}
+	
+		indexes[i] = index;
 	}
+
+	// Get most fit out of the random participants generated
+	int best_fitness = INT_MAX;
+	int winner_index = 0;
+	for (int i = 0; i < participants; i++) {
+		int index_fitness = fitness(population[indexes[i]], size, max_weight);
+		if (index_fitness < best_fitness) {
+			best_fitness = index_fitness;
+			winner_index = indexes[i];
+		}
+	}
+
+	return winner_index;
 }
+
 
 // Returns two array elements (genes) unique to eachother index-wise
 // Possibility that the actual values be the same
@@ -315,12 +299,14 @@ void swap_mutate(int *chromosome, int size) {
 	swap(chromosome, genes[0], genes[1]);
 }
 
+
+// Decides which mutation mechanism to use
 void mutate(int *chromosome, int size) {
 	swap_mutate(chromosome, size);
 }
 
 int main(int argc, char** argv) {
-	unsigned long seed = mix(clock(), time(NULL), getpid());
+	unsigned long seed = clock() * time(NULL) * getpid();
 	// Seed only once at the top of the program
 	// If you reseed too quickly during the same second, you will end up getting the same numbers
 	srand(seed);
@@ -380,21 +366,23 @@ int main(int argc, char** argv) {
 		for (int i = 0; i < POP_SIZE; i++) {
 			copyInto2DArray(total_population[i], population[i], size);
 		}
+		
+		// Generate offspring the size of POP_SIZE
 		for (int i = 1; i <= POP_SIZE; i+=2) {
-			//printf("WINNER1:\n");
-			int *winner = tournament_selection(population, size, max_weight);
-			//printArray(winner, size);
 
-			
-			//printf("WINNER2:\n");
-			int *winner2= tournament_selection(population, size, max_weight);
-			//printArray(winner2, size);
+			// Getting two unique parents that have been selected from a random group
+			int chromosomeA = tournament_selection(population, size, TOURNAMENT_SIZE, max_weight);
+			int chromosomeB = tournament_selection(population, size, TOURNAMENT_SIZE, max_weight);
 
-			// Crossover - kind of buggy
-			//printf("OFFSPRING:\n");
-			int **offspring = crossover(winner, winner2, size);
+			while (chromosomeA == chromosomeB) {
+				chromosomeB = tournament_selection(population, size, TOURNAMENT_SIZE, max_weight);
+			}
 
-			// Mutation of offspring - swap is working
+			// Generate offspring from parents who won the selection process
+			int **offspring = crossover(population[chromosomeA], population[chromosomeB], size);
+
+
+			// Offspring generated from crossover has a chance to mutate
 			double mutate_A = rand() / (double) RAND_MAX;
 			double mutate_B = rand() / (double) RAND_MAX;
 
@@ -406,14 +394,36 @@ int main(int argc, char** argv) {
 				mutate(offspring[1], size);
 			}
 
-			//for (int i = 0; i < 2; i++) { printArray(offspring[i], size); }
-
+			// Offspring get added to the population for sorting
 			copyInto2DArray(total_population[POP_SIZE * 2 - i], offspring[0], size);
 			copyInto2DArray(total_population[POP_SIZE * 2 - (i + 1)], offspring[1], size);
+
+			// With new offspring, we need to cull some individuals from population
+
+
+			//printf("WINNER1:\n");
+			//int *winner = tournament_selection(population, size, 6, max_weight);
+			//printArray(winner, size);
+
+			
+			//printf("WINNER2:\n");
+			//int *winner2= tournament_selection(population, size, 6, max_weight);
+			//printArray(winner2, size);
+
+			// Crossover - kind of buggy
+			//printf("OFFSPRING:\n");
+
+			//for (int i = 0; i < 2; i++) { printArray(offspring[i], size); }
 		}
 		
+		// Sort by most fit and use those
+		qsort(total_population, 2 * POP_SIZE, sizeof(total_population[0]), compare_fitness);
 
-		// After crossover and mutation, add to population
+		// After sort, keep the top POP_SIZE chromosomes
+		for (int i = 0; i < POP_SIZE; i++) {
+			copyInto2DArray(population[i], total_population[i], size);
+		}
+
 		
 		//for (int i = 0; i < 2 * POP_SIZE; i++) {
 			//printArray(total_population[i], size);
@@ -425,18 +435,13 @@ int main(int argc, char** argv) {
 		//}
 		//printf("\n");
 		
-		// Sort by most fit and use those
-		qsort(total_population, 2 * POP_SIZE, sizeof(total_population[0]), compare_fitness);
 		//printf("After sorting... ---------------------\n");
 		//for (int i = 0; i < 2 * POP_SIZE; i++) {
 			//printf("%d, ", fitness(total_population[i], size, max_weight));
 		//}
 		//printf("\n");
 
-		// After sort, keep the top POP_SIZE chromosomes
-		for (int i = 0; i < POP_SIZE; i++) {
-			copyInto2DArray(population[i], total_population[i], size);
-		}
+		
 
 		//print2DArray(population, size);
 		if (fitness(population[0], size, max_weight) <= best) {
